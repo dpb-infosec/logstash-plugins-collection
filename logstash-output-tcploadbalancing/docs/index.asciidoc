@@ -1,0 +1,123 @@
+= Logstash TCP Loadbalancing Output Plugin
+Author Name <you@example.com>
+v1.0, 2025-02-04
+:toc:
+:toclevels: 2
+
+This plugin implements a TCP load balancing output for Logstash. It buffers events using a combination of memory and disk queues and distributes these events among multiple hosts via round-robin selection. It also handles reconnections using an exponential backoff strategy and optionally supports SSL for secure TCP connections.
+
+== Overview
+
+The TCP Loadbalancing Output Plugin is designed to improve the reliability and performance of event transmission over TCP. Its key features include:
+
+* **Load Balancing:** Distributes outgoing events across multiple hosts using a round-robin algorithm.
+* **Queueing:** Buffers events using an internal queue before sending them as an aggregated payload.
+* **Reconnection & Retry:** Implements periodic checks for closed sockets and attempts reconnections with exponential backoff.
+* **SSL Support:** Provides optional SSL encryption for secure communication.
+* **Atomic Batch Sending:** Gathers queued messages into a single payload for atomic delivery to one host.
+
+== Architecture
+
+The plugin maintains an internal queue (`@queue`) and a set of per-host socket holders. Each host is represented by a `SocketLB` object, which tracks:
+- The current TCP (or SSL-wrapped) socket,
+- The connection state (OPEN or CLOSED),
+- The number of messages sent,
+- The number of retry attempts, and
+- The timestamp for the next retry attempt.
+
+A periodic timer task is set up to check and reconnect any closed sockets. For sending, the plugin aggregates queued messages into a single payload and uses non-blocking I/O to transmit the payload. If a transmission fails mid-send, the entire payload is requeued to ensure atomicity.
+
+== Configuration Options
+
+[source,ruby]
+----
+# Connectivity configuration
+config :hosts, :validate => :array, :required => true
+config :port, :validate => :number, :required => true
+config :retry_timeout, :validate => :number, :default => 1
+config :socket_timeout, :validate => :number, :default => 5
+
+# General configuration
+config :lb_method, :validate => ['round_robin'], :default => 'round_robin'
+
+# SSL configuration
+config :ssl_enabled, :validate => :boolean, :default => false
+config :ssl_certificate, :validate => :path
+config :ssl_key, :validate => :path
+config :ssl_key_passphrase, :validate => :password, :default => nil
+config :ssl_supported_protocols, :validate => ['TLSv1.1', 'TLSv1.2', 'TLSv1.3'], :default => ['TLSv1.3'], :list => true
+config :ssl_cipher_suites, :validate => :string, :list => true
+----
+
+== Load Balancing
+
+The plugin currently only supports a round-robin selection strategy for choosing the host to which events are sent. A mutex (`@round_robin_mutex`) protects the counter that cycles through the configured hosts, ensuring thread-safe access in concurrent environments.
+
+== Reconnection & Retry Strategy
+
+For each host, the plugin monitors the socket’s health. When a socket is detected as closed or non-responsive:
+* The socket is closed (if not already).
+* An exponential backoff strategy is applied based on the number of retry attempts.
+* The next reconnection attempt is scheduled after the computed backoff delay.
+
+== SSL Support
+
+When SSL is enabled, the plugin:
+* Initializes an SSL context using the configured certificate and key.
+* Wraps the TCP socket in an `OpenSSL::SSL::SSLSocket`.
+* Ensures secure communication with the remote host.
+
+== Data Flow
+
+1. **Event Buffering:**  
+   Incoming encoded events are pushed onto an internal queue.
+
+2. **Payload Aggregation:**  
+   The plugin gathers all queued messages into a single payload.
+
+3. **Host Selection & Sending:**  
+   Using round-robin, one host is selected. The plugin then attempts a non-blocking write of the aggregated payload.  
+   * If the write is only partially successful or fails, the payload is requeued and the plugin retries after a delay.
+
+4. **Socket Monitoring:**  
+   A periodic timer task checks each socket’s status. Closed or unhealthy sockets trigger reconnection attempts.
+
+== Example Logstash Configuration
+
+[source,ruby]
+----
+output {
+  tcploadbalancing {
+    hosts => ["host1.example.com", "host2.example.com"]
+    port => 5000
+    retry_timeout => 2
+    socket_timeout => 5
+    lb_method => "round_robin"
+    ssl_enabled => true
+    ssl_certificate => "/path/to/cert.pem"
+    ssl_key => "/path/to/key.pem"
+    ssl_key_passphrase => "secret"
+    ssl_supported_protocols => ["TLSv1.2", "TLSv1.3"]
+    ssl_cipher_suites => ["TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"]
+  }
+}
+----
+
+== Pipeline Identification
+
+To assist with debugging and management in multi-pipeline setups, the plugin uses the pipeline ID (defaulting to `main` if not set) to set thread names. This makes it easier to track activities related to a specific pipeline.
+
+== Contributing
+
+Contributions are welcome! Whether you’re reporting bugs, suggesting features, or submitting patches, every contribution helps. For further details, see the [CONTRIBUTING](https://github.com/elastic/logstash/blob/main/CONTRIBUTING.md) guidelines.
+
+== License
+
+This plugin is distributed under the Apache 2.0 License.
+
+== Further Information
+
+For more detailed documentation and updates, please visit the [Logstash documentation site](http://www.elastic.co/guide/en/logstash/current/).
+
+Need help? Join the `#logstash` channel on Freenode IRC or visit the [Logstash discussion forum](https://discuss.elastic.co/c/logstash).
+

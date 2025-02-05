@@ -1,0 +1,123 @@
+= Logstash Syslog Codec Plugin
+Author Name <you@example.com>
+v1.0, 2025-02-04
+:toc:
+:toclevels: 2
+
+This plugin implements a custom syslog parser for Logstash. It supports two framing mechanisms:
+
+* **OCTET_COUNTING** – where each message is prefixed with a digit (or digits) and a space indicating the byte-length of the message.
+* **NEWLINE_DELIMITED** – where each message is terminated by a newline character.
+
+The codec maintains an internal buffer for partial data and uses a custom parser (located in `lib/logstash/codecs/syslog/parser.rb`) to process complete syslog messages. Each successfully parsed message is converted into a Logstash event.
+
+== Dependencies
+
+This codec:
+
+* Inherits from `LogStash::Codecs::Base`.
+* Includes the mixin `LogStash::PluginMixins::EventSupport::EventFactoryAdapter` for event creation.
+* Requires a relative syslog parser (`syslog/parser.rb`) that implements the actual syslog field extraction logic.
+* Supports ECS compatibility via the `LogStash::PluginMixins::ECSCompatibilitySupport` mixin.
+
+== Configuration Options
+
+[source,ruby]
+----
+# Enable or disable octet counting framing.
+config :octet_counting, :validate => :boolean, :default => false
+
+# Optional format string for event formatting.
+config :format, :validate => :string
+
+# Message delimiter (default: newline). This is ignored when octet counting is enabled.
+config :delimiter, :validate => :string, :default => "\n"
+----
+
+== Framing Mechanisms
+
+The codec supports two different framing mechanisms:
+
+. **OCTET_COUNTING**  
+   In this mode, each message is prefixed with a digit string (up to a maximum length) and a space. This digit string represents the length (in bytes) of the following syslog message.
+
+. **NEWLINE_DELIMITED**  
+   In this mode, each syslog message is assumed to be terminated by a newline character (`\n`).
+
+== Decoding Process
+
+The decoding process works as follows:
+
+1. **Buffering Data:**  
+   Incoming data is appended to an internal buffer.
+
+2. **Detecting Framing:**  
+   The codec attempts to detect the framing mechanism using a regular expression.  
+   * For octet counting, it looks for a pattern matching `/^(\d+)\s/` and validates that the octet count does not exceed the maximum allowed length.
+   * If no match is found, it falls back to newline-delimited framing.
+
+3. **Extracting the Message:**  
+   * For **OCTET_COUNTING**, the codec checks if the buffer contains the full message (i.e. header plus message body). If not, it waits for more data.
+   * For **NEWLINE_DELIMITED**, it waits until a newline character is encountered.
+
+4. **Parsing the Message:**  
+   Any trailing newline is removed and, if necessary, the framing header is stripped before passing the message to the parser.  
+   The parser extracts fields such as PRI, timestamp, hostname, app name, and message content.  
+   In case of errors during framing or parsing, an error event is generated with the original raw data and a tag indicating the error (e.g. `_syslogframingerror` or `_syslogparsingerror`).
+
+5. **Yielding the Event:**  
+   The parsed syslog message is then yielded as a Logstash event.
+
+== Encoding Process
+
+When encoding, the codec:
+
+1. Formats the event based on:
+   * A user-specified format string (if provided), or
+   * The event’s `full_syslog` field, or
+   * A JSON representation of the event.
+   
+2. Frames the resulting message string using the configured framing:
+   * For **OCTET_COUNTING**, the message is prefixed with its byte count and a space.
+   * For **NEWLINE_DELIMITED**, a newline character is appended.
+
+3. Calls the `on_event` callback with the event and the encoded string.
+
+== Flushing
+
+When the codec is flushed (e.g. during shutdown), any remaining data in the buffer is emitted as a final event. This event is tagged with `_syslogpartial` to indicate that it contains partial data.
+
+== Example Logstash Configuration
+
+[source,ruby]
+----
+input {
+  tcp {
+    port => 5000
+    codec => syslog {
+      # Enable octet counting mode if needed.
+      octet_counting => true
+      delimiter => ""
+    }
+  }
+}
+
+filter {
+  # Your filter logic here.
+}
+
+output {
+  stdout { codec => rubydebug }
+}
+----
+
+== License
+
+This plugin is distributed under the Apache 2.0 License.
+
+== Further Information
+
+For more detailed documentation and updates, please visit the [Logstash documentation site](http://www.elastic.co/guide/en/logstash/current/).
+
+Need help? Join the `#logstash` channel on Freenode IRC or visit the [Logstash discussion forum](https://discuss.elastic.co/c/logstash).
+
