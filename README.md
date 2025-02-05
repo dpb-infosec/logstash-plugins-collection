@@ -49,7 +49,7 @@ Additional features include:
 - Full RFC support and auto sensing
 - Handling framing and parsing errors by generating error events with specific tags.
 
-_For detailed documentation, see the [Syslog Codec Documentation](./codec/logstash-codec-syslog/docs/index.asciidoc)._
+_For detailed documentation, see the [Syslog Codec Documentation](./logstash-codec-syslog/docs/index.asciidoc)._
 
 ### TCP Loadbalancing Output Plugin
 
@@ -61,7 +61,7 @@ This output plugin distributes events across multiple TCP hosts. Key features:
 - **SSL Support:** Optionally secures TCP connections using SSL.
 - **Atomic Batch Sending:** Aggregates queued messages into a single payload to ensure atomic delivery.
 
-_For detailed documentation, see the [TCP Loadbalancing Documentation](./output/logstash-output-tcploadbalancing/docs/index.asciidoc)._
+_For detailed documentation, see the [TCP Loadbalancing Documentation](./logstash-output-tcploadbalancing/docs/index.asciidoc)._
 
 ## Getting Started
 
