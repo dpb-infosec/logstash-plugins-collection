@@ -96,7 +96,7 @@ class LogStash::Outputs::TcpLoadbalancing < LogStash::Outputs::Base
     encoded.each do |event, data|
       @queue.push(data)
     end
-
+    @logger.debug("Queue size: #{@queue.size}")
     process_queue if @queue.size > 0
   end
 
@@ -247,33 +247,54 @@ class LogStash::Outputs::TcpLoadbalancing < LogStash::Outputs::Base
   # -------------------------------------------------------------------------
   def attempt_send_payload(host, payload)
     socket = @sockets[host].tcp_socket
-    begin
+    total_bytes = payload.bytesize
+    bytes_written = 0
+    tries = 0
+  
+    while bytes_written < total_bytes
       # Wait until the socket is writable.
       unless IO.select(nil, [socket], nil, @socket_timeout)
         return false
       end
-      written = socket.write_nonblock(payload)
-      if written != payload.bytesize
-        raise "Partial write: wrote #{written} bytes instead of #{payload.bytesize}"
+  
+      begin
+        # Attempt to write the remaining part of the payload.
+        chunk = payload.byteslice(bytes_written, total_bytes - bytes_written)
+        written = socket.write_nonblock(chunk)
+        if written > 0
+          bytes_written += written
+          # Reset the deadlock counter when progress is made.
+          tries = 0
+        else
+          tries += 1
+        end
+      rescue IO::WaitWritable
+        @logger.debug("Socket for host #{host} not writable; waiting...")
+        # Wait again for writability.
+        if IO.select(nil, [socket], nil, @socket_timeout).nil?
+          return false
+        end
+        tries += 1
       end
-      true
-    rescue IO::WaitWritable
-      @logger.debug("Socket for host #{host} not writable; waiting...")
-      if IO.select(nil, [socket], nil, @socket_timeout).nil?
-        false
-      else
-        retry
+  
+      # If 10 consecutive attempts result in no progress, break to avoid deadlock.
+      if tries >= 10
+        @logger.error("Deadlock detected: Unable to complete writing payload to host #{host} after 10 attempts")
+        return false
       end
-    rescue Errno::EPIPE, Errno::ECONNRESET, IOError => e
-      @logger.debug("Error writing to host #{host}: #{e.message}")
-      close_socket(host)
-      false
-    rescue => e
-      @logger.error("Unexpected error writing to host #{host}: #{e.message}")
-      close_socket(host)
-      false
     end
+  
+    true
+  rescue Errno::EPIPE, Errno::ECONNRESET, IOError => e
+    @logger.debug("Error writing to host #{host}: #{e.message}")
+    close_socket(host)
+    false
+  rescue => e
+    @logger.error("Unexpected error writing to host #{host}: #{e.message}")
+    close_socket(host)
+    false
   end
+  
 
   # -------------------------------------------------------------------------
   # close_socket(host)
