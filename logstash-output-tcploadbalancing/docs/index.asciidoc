@@ -1,5 +1,5 @@
 = Logstash TCP Loadbalancing Output Plugin
-Author Name <you@example.com>
+Author Name <Yannick Wellens>
 v1.0, 2025-02-04
 :toc:
 :toclevels: 2
