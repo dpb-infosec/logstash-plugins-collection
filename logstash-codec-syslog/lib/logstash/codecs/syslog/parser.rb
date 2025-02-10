@@ -95,9 +95,13 @@ class LogStash::Codecs::Syslog::Parser
   /x.freeze
 
   RFC3164_MESSAGE_REGEX = /
-    ^(?<app_name>[^\[\]:]+?)
-    (?:\s*-\s*:|\[(?<procid>\d+)\]:)\s*
-    (?<message>.*)$
+    ^(?<app_name>[^\[\]:]+)
+    (?:
+      (?:\s*-\s*:) |       # Matches " -:" (with optional spaces), meaning no procid.
+      (?:\[(?<procid>\d+)\]:) |  # Matches "[123]:" capturing the digits.
+      :                    # Matches a lone colon.
+    )
+    \s*(?<message>.*)$
   /x.freeze
 
   # Define a constant for the regex patterns so they aren’t reallocated for every parse.
