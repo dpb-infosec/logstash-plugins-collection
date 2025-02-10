@@ -95,8 +95,8 @@ class LogStash::Codecs::Syslog::Parser
   /x.freeze
 
   RFC3164_MESSAGE_REGEX = /
-    ^(?<app_name>[^\[\]:]+)
-    (?:\[(?<procid>\d+)\])?:\s*
+    ^(?<app_name>[^\[\]:]+?)
+    (?:\s*-\s*:|\[(?<procid>\d+)\]:)\s*
     (?<message>.*)$
   /x.freeze
 
