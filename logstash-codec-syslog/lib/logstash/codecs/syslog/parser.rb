@@ -82,7 +82,7 @@ class LogStash::Codecs::Syslog::Parser
   RFC3164_REGEX = /
     ^(?:<(?<pri>\d+)>|)
     (?<timestamp>
-      (?:[A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2})
+      (?:[A-Za-z]{3}\s+\d+\s+\d{1,2}:\d{2}:\d{2})
       |
       (?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z))
     )\s+
