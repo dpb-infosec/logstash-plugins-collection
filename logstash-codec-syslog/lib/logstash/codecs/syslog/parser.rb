@@ -259,7 +259,7 @@ class LogStash::Codecs::Syslog::Parser
       if rfc != :rfc5424
         begin
           ts_with_year = "#{Time.now.year} #{ts}"
-          Time.strptime(ts_with_year, '%Y %b %e %H:%M:%S').iso8601
+          Time.strptime(ts_with_year, '%Y %b %e %k:%M:%S').iso8601
         rescue ArgumentError => e2
           @logger.error("Timestamp parsing error (RFC3164): #{ts}", exception: e2)
           timestamp_str
