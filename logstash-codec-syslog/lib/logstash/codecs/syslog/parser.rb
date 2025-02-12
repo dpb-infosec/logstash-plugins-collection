@@ -66,7 +66,7 @@ class LogStash::Codecs::Syslog::Parser
   # -------------------------------------------------------
   # 2) REGEX DEFINITIONS
   # -------------------------------------------------------
-  RFC5424_REGEX = /^(?:<(?<pri>\d+)>|)(?<version>\d+)\s+(?<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))\s+(?<hostname>\S+)\s+(?<app_name>\S+)\s+(?<procid>\S+)\s+(?<msgid>\S+)\s+(?<structured_data>(?:\[[^\]]*\])+|-)\s*(?<message>.*)?$/x.freeze
+  RFC5424_REGEX = /^(?:<(?<pri>\d+)>|)(?<version>\d+)\s+(?<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))\s+(?<hostname>\S+)\s+(?<app_name>[^:\s]+)(?::)?\s+(?<procid>\S+)\s+(?<msgid>\S+)\s+(?<structured_data>(?:\[[^\]]*\])+|-)\s*(?<message>.*)?$/x.freeze
 
   RFC3164_REGEX = /^(?:<(?<pri>\d+)>|)(?<timestamp>(?:[A-Za-z]{3}\s+\d+\s+\d{1,2}:\d{2}:\d{2})|(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)))\s+(?<hostname>\S+)\s+(?<message>.*)$/x.freeze
   
