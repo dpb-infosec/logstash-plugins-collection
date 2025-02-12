@@ -81,7 +81,11 @@ class LogStash::Codecs::Syslog::Parser
 
   RFC3164_REGEX = /
     ^(?:<(?<pri>\d+)>|)
-    (?<timestamp>[A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2})\s+
+    (?<timestamp>
+      (?:[A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2})
+      |
+      (?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z))
+    )\s+
     (?<hostname>\S+)\s+
     (?<message>.*)$
   /x.freeze
@@ -248,25 +252,24 @@ class LogStash::Codecs::Syslog::Parser
   # -------------------------------------------------------
   def convert_to_iso(timestamp_str, rfc)
     return timestamp_str if timestamp_str.nil? || timestamp_str.strip.empty?
-
-    if rfc == :rfc5424
-      begin
-        Time.parse(timestamp_str).iso8601
-      rescue ArgumentError => e
-        @logger.error("Timestamp parsing error (RFC5424): #{timestamp_str}", exception: e)
-        timestamp_str
-      end
-    else
-      begin
-        current_year = Time.now.year
-        timestamp_with_year = "#{current_year} #{timestamp_str.strip}"
-        Time.strptime(timestamp_with_year, '%Y %b %e %H:%M:%S').iso8601
-      rescue ArgumentError => e
-        @logger.error("Timestamp parsing error (RFC3164): #{timestamp_str}", exception: e)
+    ts = timestamp_str.strip
+    begin
+      Time.parse(ts).iso8601
+    rescue ArgumentError => e
+      if rfc != :rfc5424
+        begin
+          ts_with_year = "#{Time.now.year} #{ts}"
+          Time.strptime(ts_with_year, '%Y %b %e %H:%M:%S').iso8601
+        rescue ArgumentError => e2
+          @logger.error("Timestamp parsing error (RFC3164): #{ts}", exception: e2)
+          timestamp_str
+        end
+      else
+        @logger.error("Timestamp parsing error (RFC5424): #{ts}", exception: e)
         timestamp_str
       end
     end
-  end
+  end  
 
   # -------------------------------------------------------
   # default_parsed(message)
