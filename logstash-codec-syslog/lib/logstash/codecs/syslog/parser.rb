@@ -66,47 +66,14 @@ class LogStash::Codecs::Syslog::Parser
   # -------------------------------------------------------
   # 2) REGEX DEFINITIONS
   # -------------------------------------------------------
-  RFC5424_REGEX = /
-    ^(?:<(?<pri>\d+)>|)                                    # Optional PRI enclosed in <>
-    (?<version>\d+)\s+                                     # Version number
-    (?<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}         # ISO8601 timestamp (with optional fractional seconds)
-      (?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))\s+
-    (?<hostname>\S+)\s+                                    # Hostname
-    (?<app_name>\S+)\s+                                    # App-name
-    (?<procid>\S+)\s+                                      # Process ID
-    (?<msgid>\S+)\s+                                       # Message ID
-    (?<structured_data>(?:\[[^\]]*\])+|-) \s*              # Structured Data (one or more SD elements or a single dash)
-    (?<message>.*)?$                                       # Message content (optional)
-  /x.freeze
+  RFC5424_REGEX = /^(?:<(?<pri>\d+)>|)(?<version>\d+)\s+(?<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))\s+(?<hostname>\S+)\s+(?<app_name>\S+)\s+(?<procid>\S+)\s+(?<msgid>\S+)\s+(?<structured_data>(?:\[[^\]]*\])+|-)\s*(?<message>.*)?$/x.freeze
 
-  RFC3164_REGEX = /
-    ^(?:<(?<pri>\d+)>|)
-    (?<timestamp>
-      (?:[A-Za-z]{3}\s+\d+\s+\d{1,2}:\d{2}:\d{2})
-      |
-      (?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z))
-    )\s+
-    (?<hostname>\S+)\s+
-    (?<message>.*)$
-  /x.freeze
-
-  RFCUNIX_REGEX  = /
-    ^(?:<(?<pri>\d+)>|)
-    (?<timestamp>[A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2})\s+
-    Message\sforwarded\sfrom\s(?<hostname>\S+):\s+
-    (?<app_name>\w+)(?:\[(?<procid>\d+)\])?:\s+
-    (?<message>.*)$
-  /x.freeze
-
-  RFC3164_MESSAGE_REGEX = /
-    ^(?<app_name>[^\[\]:]+)
-    (?:
-      (?:\s*-\s*:) |       # Matches " -:" (with optional spaces), meaning no procid.
-      (?:\[(?<procid>\d+|-)\]:) |  # Matches "[123]:" capturing the digits.
-      :                    # Matches a lone colon.
-    )
-    \s*(?<message>.*)$
-  /x.freeze
+  RFC3164_REGEX = /^(?:<(?<pri>\d+)>|)(?<timestamp>(?:[A-Za-z]{3}\s+\d+\s+\d{1,2}:\d{2}:\d{2})|(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)))\s+(?<hostname>\S+)\s+(?<message>.*)$/x.freeze
+  
+  RFCUNIX_REGEX = /^(?:<(?<pri>\d+)>|)(?<timestamp>[A-Z][a-z]{2}\s+\d{2}:\d{2}:\d{2})\s+Message\sforwarded\sfrom\s(?<hostname>\S+):\s+(?<app_name>\w+)(?:\[(?<procid>\d+)\])?:\s+(?<message>.*)$/x.freeze
+  
+  RFC3164_MESSAGE_REGEX = /^(?:(?<app_name>[^\[\]:]+)|)(?:(?:\s*-\s*:)|(?:\[(?<procid>\d+|-)\]:)|:)\s*(?<message>.*)$/x.freeze
+ 
 
   # Define a constant for the regex patterns so they aren’t reallocated for every parse.
   REGEX_PATTERNS = [
