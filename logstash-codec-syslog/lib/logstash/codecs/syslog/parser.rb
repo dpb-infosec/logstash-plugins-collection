@@ -98,7 +98,7 @@ class LogStash::Codecs::Syslog::Parser
     ^(?<app_name>[^\[\]:]+)
     (?:
       (?:\s*-\s*:) |       # Matches " -:" (with optional spaces), meaning no procid.
-      (?:\[(?<procid>\d+)\]:) |  # Matches "[123]:" capturing the digits.
+      (?:\[(?<procid>\d+|-)\]:) |  # Matches "[123]:" capturing the digits.
       :                    # Matches a lone colon.
     )
     \s*(?<message>.*)$
