@@ -31,6 +31,7 @@ class LogStash::Codecs::Syslog < LogStash::Codecs::Base
   
   config_name "syslog"
 
+  config :udp_mode, :validate => :boolean, :default => false
   config :octet_counting, :validate => :boolean, :default => false
   config :format, :validate => :string  # Optional format string for event formatting.
   config :delimiter, :validate => :string, :default => "\n"
@@ -68,11 +69,36 @@ class LogStash::Codecs::Syslog < LogStash::Codecs::Base
   # -------------------------------------------------------------------------
   def decode(data)
     @buffer << data
+  
+    if @udp_mode
+      # In UDP mode, treat the entire buffer as one complete syslog message.
+      syslog_message = @buffer.dup
+      @buffer.clear
+      syslog_message.chomp!
+  
+      # No framing header removal is needed in UDP mode.
+      message_to_parse = syslog_message
+  
+      begin
+        parsed_message = @parser.parse_message(message_to_parse)
+      rescue StandardError => e
+        @logger.error("Error during parsing syslog message",
+                      error: e,
+                      syslog_message: message_to_parse)
+        yield create_error_event(syslog_message)
+        return
+      end
+  
+      yield decode_message(parsed_message)
+      return
+    end
+  
+    # Existing TCP (or framing-detection) logic for non-UDP mode.
     loop do
       break if @buffer.empty?
-
+  
       framing, msg_length, header_length = detect_framing(@buffer)
-
+  
       unless framing && msg_length && header_length
         @logger.error("Invalid framing detected. Producing error event and discarding buffer.",
                       buffer: @buffer)
@@ -80,30 +106,34 @@ class LogStash::Codecs::Syslog < LogStash::Codecs::Base
         @buffer.clear
         break
       end
-
+  
       syslog_message = case framing
                        when OCTET_COUNTING
                          # For octet counting, ensure the buffer contains a full message.
                          if (msg_length + header_length) > @buffer.bytesize
                            break  # Wait for more data
                          end
-
+  
                          # slice!(0..N) is inclusive so subtract 1 from total length.
                          total_length = msg_length + header_length - 1
                          @buffer.slice!(0..total_length)
                        else  # NEWLINE_DELIMITED framing
-                         newline_index = @buffer.index("\n")
-                         unless newline_index
-                           break  # Wait for more data.
+                         newline_index = @buffer.index(@delimiter)
+                         if newline_index.nil?
+                           # No delimiter found; assume the message is complete.
+                           syslog_message = @buffer.dup
+                           @buffer.clear
+                           syslog_message
+                         else
+                           @buffer.slice!(0..newline_index)
                          end
-                         @buffer.slice!(0..newline_index)
                        end
-
+  
       syslog_message.chomp!
-
+  
       # For octet counting framing, remove the framing header.
       message_to_parse = syslog_message[header_length..-1] || syslog_message
-
+  
       begin
         parsed_message = @parser.parse_message(message_to_parse)
       rescue StandardError => e
@@ -113,10 +143,11 @@ class LogStash::Codecs::Syslog < LogStash::Codecs::Base
         yield create_error_event(syslog_message)
         next
       end
-
+  
       yield decode_message(parsed_message)
     end
   end
+  
 
   # -------------------------------------------------------------------------
   # encode(event)
