@@ -108,26 +108,22 @@ class LogStash::Codecs::Syslog < LogStash::Codecs::Base
       end
   
       syslog_message = case framing
-                       when OCTET_COUNTING
-                         # For octet counting, ensure the buffer contains a full message.
-                         if (msg_length + header_length) > @buffer.bytesize
-                           break  # Wait for more data
-                         end
-  
-                         # slice!(0..N) is inclusive so subtract 1 from total length.
-                         total_length = msg_length + header_length - 1
-                         @buffer.slice!(0..total_length)
-                       else  # NEWLINE_DELIMITED framing
-                         newline_index = @buffer.index(@delimiter)
-                         if newline_index.nil?
-                           # No delimiter found; assume the message is complete.
-                           syslog_message = @buffer.dup
-                           @buffer.clear
-                           syslog_message
-                         else
-                           @buffer.slice!(0..newline_index)
-                         end
-                       end
+            when OCTET_COUNTING
+              # For octet counting, ensure the buffer contains a full message.
+              if (msg_length + header_length) > @buffer.bytesize
+                break  # Wait for more data
+              end
+
+              # slice!(0..N) is inclusive so subtract 1 from total length.
+              total_length = msg_length + header_length - 1
+              @buffer.slice!(0..total_length)
+            else  # NEWLINE_DELIMITED framing
+              newline_index = @buffer.index("\n")
+              unless newline_index
+                break  # Wait for more data.
+              end
+              @buffer.slice!(0..newline_index)
+            end
   
       syslog_message.chomp!
   
