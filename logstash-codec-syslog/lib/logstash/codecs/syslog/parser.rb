@@ -7,13 +7,15 @@
 # The parser:
 #   • Defines facility and severity maps for numeric priorities.
 #   • Uses regular expressions to detect and parse different syslog formats.
-#   • Automatically converts timestamps to ISO 8601 format.
+#   • Automatically converts timestamps to both ISO 8601 (RFC5424) and RFC3164 formats.
+#   • Provides both RFC5424 and RFC3164 formatted syslog messages in the parsed output.
 #   • Provides fallback values when parsing fails.
 #
 # Usage: Called by the syslog codec to parse the raw syslog message string
 # into a structured hash that is then used to create events.
 #
 # -----------------------------------------------------------------------------
+
 
 require "logstash/codecs/base"
 require "logstash/namespace"
@@ -74,8 +76,6 @@ class LogStash::Codecs::Syslog::Parser
   
   RFC3164_MESSAGE_REGEX = /^(?:(?<app_name>[^\[\]:]+)|)(?:(?:\s*-\s*:)|(?:\[(?<procid>\d+|-)\]:)|:)\s*(?<message>.*)$/x.freeze
  
-
-  # Define a constant for the regex patterns so they aren’t reallocated for every parse.
   REGEX_PATTERNS = [
     { regex: RFC5424_REGEX, rfc: :rfc5424 },
     { regex: RFCUNIX_REGEX, rfc: :rfc3164 },
@@ -133,6 +133,42 @@ class LogStash::Codecs::Syslog::Parser
   end
 
   # -------------------------------------------------------
+  # format_timestamp(ts_str, target_format)
+  #
+  # Converts a timestamp string to the desired format.
+  # If target_format is :rfc5424, returns ISO 8601.
+  # If target_format is :rfc3164, returns a "Mmm dd HH:MM:SS" string.
+  # On failure, returns the original string.
+  # -------------------------------------------------------
+  def format_timestamp(ts_str, target_format)
+    return ts_str if ts_str.nil? || ts_str.strip.empty?
+    ts = ts_str.strip
+    begin
+      time_obj = Time.parse(ts)
+    rescue ArgumentError => e
+      if target_format == :rfc3164
+        begin
+          time_obj = Time.strptime("#{Time.now.year} #{ts}", '%Y %b %e %H:%M:%S')
+        rescue ArgumentError => e2
+          @logger.error("Timestamp parsing error (RFC3164): #{ts}", exception: e2)
+          return ts_str
+        end
+      else
+        @logger.error("Timestamp parsing error (RFC5424): #{ts}", exception: e)
+        return ts_str
+      end
+    end
+
+    if target_format == :rfc5424
+      time_obj.iso8601
+    elsif target_format == :rfc3164
+      time_obj.strftime("%b %e %H:%M:%S")
+    else
+      ts_str
+    end
+  end
+
+  # -------------------------------------------------------
   # parse(message)
   #
   # Attempts to match the message against several syslog regexes.
@@ -160,8 +196,10 @@ class LogStash::Codecs::Syslog::Parser
     version_str = safe_match(match, 'version')
     version = version_str ? version_str.to_i : 1
 
-    timestamp = safe_match(match, 'timestamp') || "-"
-    timestamp = convert_to_iso(timestamp, rfc) if timestamp != "-"
+    # Get the raw timestamp and create both formatted versions.
+    raw_timestamp = safe_match(match, 'timestamp') || "-"
+    timestamp_rfc5424 = (raw_timestamp == "-" ? "-" : format_timestamp(raw_timestamp, :rfc5424))
+    timestamp_rfc3164 = (raw_timestamp == "-" ? "-" : format_timestamp(raw_timestamp, :rfc3164))
 
     hostname = (safe_match(match, 'hostname') || "-").to_s.strip
     hostname = "-" if hostname.empty?
@@ -170,7 +208,7 @@ class LogStash::Codecs::Syslog::Parser
     procid   = safe_match(match, 'procid')   || "-"
     msgid    = (safe_match(match, 'msgid') || "-")
     structured_data = (safe_match(match, 'structured_data') || "-")
-    message_content = safe_match(match, 'msg1') || safe_match(match, 'msg2') || ""
+    message_content = safe_match(match, 'message') || safe_match(match, 'msg1') || safe_match(match, 'msg2') || ""
 
     # Additional parsing for RFC3164: try to extract app_name and procid from message content.
     if rfc == :rfc3164
@@ -186,22 +224,31 @@ class LogStash::Codecs::Syslog::Parser
       message_content = "#{app_name}:#{message_content}"
     end
 
-    full_syslog_message = "<#{pri}>#{version} #{timestamp} #{hostname} #{app_name} " \
+    # Build RFC5424 formatted message.
+    full_syslog_rfc5424 = "<#{pri}>#{version} #{timestamp_rfc5424} #{hostname} #{app_name} " \
                           "#{procid} #{msgid} #{structured_data} #{message_content}".strip
 
+    # Build RFC3164 formatted message.
+    tag = app_name != "-" ? app_name.dup : ""
+    tag += "[#{procid}]" if procid != "-" && !tag.empty?
+    tag = tag.empty? ? ":" : " #{tag}:"
+    full_syslog_rfc3164 = "<#{pri}>#{timestamp_rfc3164} #{hostname}#{tag} #{message_content}".strip
+
     parsed_event = {
-      'pri'             => pri,
-      'version'         => version,
-      'timestamp'       => timestamp,
-      'hostname'        => hostname,
-      'app_name'        => app_name,
-      'procid'          => procid,
-      'msgid'           => msgid,
-      'structured_data' => structured_data,
-      'message'         => message_content,
-      'orig_message'    => message,
-      'rfc'             => rfc,
-      'full_syslog'     => full_syslog_message
+      'pri'                 => pri,
+      'version'             => version,
+      'timestamp'           => timestamp_rfc5424,  # default timestamp in RFC5424 (ISO8601)
+      'timestamp_rfc3164'   => timestamp_rfc3164,
+      'hostname'            => hostname,
+      'app_name'            => app_name,
+      'procid'              => procid,
+      'msgid'               => msgid,
+      'structured_data'     => structured_data,
+      'message'             => message_content,
+      'orig_message'        => message,
+      'rfc'                 => rfc,
+      'full_syslog_rfc5424' => full_syslog_rfc5424,
+      'full_syslog_rfc3164' => full_syslog_rfc3164
     }
 
     parsed_event.merge(decoded_pri)
@@ -209,34 +256,6 @@ class LogStash::Codecs::Syslog::Parser
     @logger.error("Error parsing syslog message", exception: e, message: message)
     nil
   end
-
-  # -------------------------------------------------------
-  # convert_to_iso(timestamp_str, rfc)
-  #
-  # Converts a timestamp string to ISO 8601 format.
-  # Uses different strategies for RFC5424 and RFC3164.
-  # Returns the original string on failure.
-  # -------------------------------------------------------
-  def convert_to_iso(timestamp_str, rfc)
-    return timestamp_str if timestamp_str.nil? || timestamp_str.strip.empty?
-    ts = timestamp_str.strip
-    begin
-      Time.parse(ts).iso8601
-    rescue ArgumentError => e
-      if rfc != :rfc5424
-        begin
-          ts_with_year = "#{Time.now.year} #{ts}"
-          Time.strptime(ts_with_year, '%Y %b %e %k:%M:%S').iso8601
-        rescue ArgumentError => e2
-          @logger.error("Timestamp parsing error (RFC3164): #{ts}", exception: e2)
-          timestamp_str
-        end
-      else
-        @logger.error("Timestamp parsing error (RFC5424): #{ts}", exception: e)
-        timestamp_str
-      end
-    end
-  end  
 
   # -------------------------------------------------------
   # default_parsed(message)
