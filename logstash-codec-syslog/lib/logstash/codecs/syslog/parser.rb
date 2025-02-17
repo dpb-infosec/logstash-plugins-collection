@@ -68,7 +68,7 @@ class LogStash::Codecs::Syslog::Parser
   # -------------------------------------------------------
   # 2) REGEX DEFINITIONS
   # -------------------------------------------------------
-  RFC5424_REGEX = /^(?:<(?<pri>\d+)>)(?<version>\d+)\s+(?<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))\s+(?<hostname>\S+)\s+(?<app_name>\S+)\s+(?<procid>\S+)\s+(?<msgid>\S+)\s+(?<structured_data>(?:\[[^\]]*\])+|-)(?:\s+(?<message>.*))?$/x.freeze
+  RFC5424_REGEX = /^(?:<(?<pri>\d+)>)(?<version>\d+)\s+(?<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))\s+(?<hostname>\S+)\s+(?<app_name>\S+)\s+(?<procid>\S+)\s+(?<msgid>\S+)\s+(?:\s*(?<message>.*))?$/x.freeze
 
   RFC3164_REGEX = /^(?:<(?<pri>\d+)>|)(?<timestamp>(?:[A-Za-z]{3}\s+\d+\s+\d{1,2}:\d{2}:\d{2})|(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)))\s+(?:(?<hostname>\S+(?<!:))\s+(?<msg1>.*)|(?<msg2>.*))$/x.freeze
   
@@ -207,7 +207,6 @@ class LogStash::Codecs::Syslog::Parser
     app_name = safe_match(match, 'app_name') || "-"
     procid   = safe_match(match, 'procid')   || "-"
     msgid    = (safe_match(match, 'msgid') || "-")
-    structured_data = (safe_match(match, 'structured_data') || "-")
     message_content = safe_match(match, 'message') || safe_match(match, 'msg1') || safe_match(match, 'msg2') || ""
 
     # Additional parsing for RFC3164: try to extract app_name and procid from message content.
@@ -226,17 +225,13 @@ class LogStash::Codecs::Syslog::Parser
 
     # Build RFC5424 formatted message.
     full_syslog_rfc5424 = "<#{pri}>#{version} #{timestamp_rfc5424} #{hostname} #{app_name} " \
-                          "#{procid} #{msgid} #{structured_data} #{message_content}".strip
+                          "#{procid} #{msgid} #{message_content}".strip
 
     # Build RFC3164 formatted message.
     tag = app_name != "-" ? app_name.dup : ""
     tag += "[#{procid}]" if procid != "-" && !tag.empty?
     tag = tag.empty? ? ":" : " #{tag}:"
     tag += msgid if msgid != "-"
-
-    if structured_data != "-"
-      message_content = "#{structured_data} #{message_content}".strip
-    end
 
     full_syslog_rfc3164 = "<#{pri}>#{timestamp_rfc3164} #{hostname}#{tag} #{message_content}".strip
 
@@ -249,7 +244,6 @@ class LogStash::Codecs::Syslog::Parser
       'app_name'            => app_name,
       'procid'              => procid,
       'msgid'               => msgid,
-      'structured_data'     => structured_data,
       'message'             => message_content,
       'orig_message'        => message,
       'rfc'                 => rfc,
@@ -278,7 +272,6 @@ class LogStash::Codecs::Syslog::Parser
       'app_name'        => "-",
       'procid'          => "-",
       'msgid'           => "-",
-      'structured_data' => "-",
       'message'         => message,
       'orig_message'    => message,
       'facility'        => "-",
