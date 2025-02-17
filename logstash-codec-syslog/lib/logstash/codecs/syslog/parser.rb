@@ -231,7 +231,13 @@ class LogStash::Codecs::Syslog::Parser
     # Build RFC3164 formatted message.
     tag = app_name != "-" ? app_name.dup : ""
     tag += "[#{procid}]" if procid != "-" && !tag.empty?
+    tag += msgid if msgid != "-"
     tag = tag.empty? ? ":" : " #{tag}:"
+
+    if structured_data != "-"
+      message_content = "#{structured_data} #{message_content}".strip
+    end
+
     full_syslog_rfc3164 = "<#{pri}>#{timestamp_rfc3164} #{hostname}#{tag} #{message_content}".strip
 
     parsed_event = {
