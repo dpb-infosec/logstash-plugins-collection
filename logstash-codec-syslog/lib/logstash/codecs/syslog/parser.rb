@@ -74,7 +74,7 @@ class LogStash::Codecs::Syslog::Parser
   
   RFCUNIX_REGEX = /^(?:<(?<pri>\d+)>|)(?<timestamp>[A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2})\s+Message\sforwarded\sfrom\s(?<hostname>\S+):\s+(?<app_name>\w+)(?:\[(?<procid>\d+)\])?:\s+(?<message>.*)$/x.freeze
   
-  RFC3164_MESSAGE_REGEX = /^(?:(?<app_name>[^\[\]:]+)|)(?:(?:\s*-\s*:)|(?:\[(?<procid>\d+|-)\]:)|:)\s*(?<message>.*)$/x.freeze
+  RFC3164_MESSAGE_REGEX = /^(info\s|warning\s|err\s|notice\s|)(?:(?<app_name>[^\[\]:]+)|)(?:(?:\s*-\s*:)|(?:\[(?<procid>\d+|-)\]:)|:)\s*(?<message>.*)$/x.freeze
  
   REGEX_PATTERNS = [
     { regex: RFC5424_REGEX, rfc: :rfc5424 },
