@@ -153,7 +153,7 @@ class LogStash::Outputs::TcpLoadbalancing < LogStash::Outputs::Base
         socket.tcp_socket.close
         socket.state = CONN_STATUS::CLOSED
       rescue => e
-        @logger.debug("Error closing socket: #{e.message}")
+        @logger.error("Error closing socket: #{e.message}")
       end
     end
   end
@@ -195,7 +195,7 @@ class LogStash::Outputs::TcpLoadbalancing < LogStash::Outputs::Base
     rescue IO::WaitReadable
       true
     rescue => e
-      @logger.error("Unexpected error checking socket status for host #{host}: #{e.message}")
+      @logger.warning("Unexpected error checking socket status for host #{host}: #{e.message}")
       close_socket(host)
       false
     end
@@ -230,7 +230,7 @@ class LogStash::Outputs::TcpLoadbalancing < LogStash::Outputs::Base
         @logger.debug("Successfully sent payload")
         break
       else
-        @logger.error("Failed to send payload to all hosts; requeuing and retrying after sleep")
+        @logger.warning("Failed to send payload to all hosts; requeuing and retrying after sleep")
         @queue.push(payload)
         sleep 1
         payload = @queue.pop
